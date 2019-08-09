@@ -490,7 +490,7 @@ class QueryManager(BaseDbManager):
     def get_chemical_diseases(self, direct_evidence=None, inference_gene_symbol=None, inference_score=None,
                               inference_score_operator=None, cas_rn=None, chemical_name=None,
                               chemical_id=None, chemical_definition=None, disease_definition=None,
-                              disease_id=None, disease_name=None, limit=None, as_df=False, collapsed=True):
+                              disease_id=None, disease_name=None, limit=None, as_df=True, collapsed=True):
         """Get chemical–disease associations with inference gene
         
         :param direct_evidence: direct evidence
