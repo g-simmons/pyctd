@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pandas import read_sql
+import pandas as pd
 from sqlalchemy import distinct
 
 from . import models
@@ -489,7 +490,7 @@ class QueryManager(BaseDbManager):
     def get_chemical_diseases(self, direct_evidence=None, inference_gene_symbol=None, inference_score=None,
                               inference_score_operator=None, cas_rn=None, chemical_name=None,
                               chemical_id=None, chemical_definition=None, disease_definition=None,
-                              disease_id=None, disease_name=None, limit=None, as_df=False):
+                              disease_id=None, disease_name=None, limit=None, as_df=False, collapsed=True):
         """Get chemical–disease associations with inference gene
         
         :param direct_evidence: direct evidence
@@ -505,6 +506,7 @@ class QueryManager(BaseDbManager):
         :param disease_name: disease name
         :param int limit: maximum number of results
         :param bool as_df: if set to True result returns as `pandas.DataFrame`
+        :param bool collapsed: if set to True return `pandas.DataFrame` with one row per inference network
         :return: list of :class:`pyctd.manager.database.models.ChemicalDisease` objects
 
         .. seealso::
@@ -535,7 +537,41 @@ class QueryManager(BaseDbManager):
         q = self._join_disease(q, disease_definition=disease_definition, disease_id=disease_id,
                                disease_name=disease_name)
 
-        return self._limit_and_df(q, limit, as_df)
+        results = self._limit_and_df(q, limit, as_df=False)
+
+        if as_df and collapsed:
+            df_list = []
+        
+            for r in results:
+                r_dict = {}
+                r_dict['chemical'] = r.chemical.chemical_name
+                r_dict['chemical__id'] = r.chemical__id
+                r_dict['disease'] = r.disease.disease_name
+                r_dict['disease__id'] = r.disease__id
+                r_dict['inference_score'] = r.inference_score
+                r_dict['inference_gene_symbol'] = r.inference_gene_symbol
+                r_dict['direct_evidence'] = r.direct_evidence
+                
+                df_list.append(r_dict)
+
+            df = pd.DataFrame(df_list)
+            df['direct_evidence'] = df['direct_evidence'].fillna('None')
+            df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism', 'therapeutic','None'])
+            df = df.groupby(['disease','chemical'],as_index=False).agg({'inference_score':'mean',
+                                                               'chemical__id':'mean',
+                                                               'disease__id':'mean',
+                                                               'direct_evidence': self.agg_direct_evidence,
+                                                               'inference_gene_symbol':lambda x : set(x)})
+
+            df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism','marker/mechanism, therapeutic', 'therapeutic'])
+            df = df.sort_values(['direct_evidence','inference_score'],ascending=[True,False])
+            df = df[['chemical','disease','direct_evidence','inference_gene_symbol','inference_score']]
+            return df 
+
+        else:
+            return results
+
+
 
     def get_gene_pathways(self, gene_name=None, gene_symbol=None, gene_id=None, pathway_id=None,
                           pathway_name=None, limit=None, as_df=False):
@@ -660,3 +696,10 @@ class QueryManager(BaseDbManager):
     # TODO documentation of get_exposure_event
     def get_exposure_event(self):
         raise NotImplemented
+
+
+    def agg_direct_evidence(self,s):
+        s = [v for v in s if v !='None']
+        return ', '.join(sorted(list(set(s))))
+    
+
