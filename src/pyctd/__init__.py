@@ -18,6 +18,7 @@ from . import manager
 from .manager.database import update
 from .manager.database import set_connection, set_mysql_connection
 from .manager.query import QueryManager as query
+from .manager import models
 
 __all__ = ['update', 'query', 'set_connection', 'set_mysql_connection']
 

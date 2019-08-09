@@ -566,6 +566,7 @@ class QueryManager(BaseDbManager):
             df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism','marker/mechanism, therapeutic', 'therapeutic'])
             df = df.sort_values(['direct_evidence','inference_score'],ascending=[True,False])
             df = df[['chemical','disease','direct_evidence','inference_gene_symbol','inference_score']]
+            df = df.rename(columns={'inference_gene_symbol':'inference_network'})
             return df 
 
         else:
@@ -701,5 +702,8 @@ class QueryManager(BaseDbManager):
     def agg_direct_evidence(self,s):
         s = [v for v in s if v !='None']
         return ', '.join(sorted(list(set(s))))
+
+    def get_session(self):
+        return self.session
     
 
