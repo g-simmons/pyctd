@@ -2,6 +2,7 @@
 
 from pandas import read_sql
 import pandas as pd
+import numpy as np
 from sqlalchemy import distinct
 
 from . import models
@@ -551,21 +552,34 @@ class QueryManager(BaseDbManager):
                 r_dict['inference_score'] = r.inference_score
                 r_dict['inference_gene_symbol'] = r.inference_gene_symbol
                 r_dict['direct_evidence'] = r.direct_evidence
+                r_dict['omim_ids'] =  [v.omim_id for v in list(r.omim_ids)]
+                r_dict['pubmed_ids'] = [v.pubmed_id for v in list(r.pubmed_ids)]
                 
                 df_list.append(r_dict)
 
             df = pd.DataFrame(df_list)
             df['direct_evidence'] = df['direct_evidence'].fillna('None')
             df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism', 'therapeutic','None'])
+            direct_ev_idx = df.direct_evidence != 'None'
+            df.loc[direct_ev_idx,'pubmed_ids__direct'] =  df.loc[direct_ev_idx,'pubmed_ids']
+            df.loc[direct_ev_idx,'omim_ids__direct'] =  df.loc[direct_ev_idx,'omim_ids']
+
             df = df.groupby(['disease','chemical'],as_index=False).agg({'inference_score':'mean',
                                                                'chemical__id':'mean',
                                                                'disease__id':'mean',
                                                                'direct_evidence': self.agg_direct_evidence,
-                                                               'inference_gene_symbol':lambda x : set(x)})
+                                                               'inference_gene_symbol': lambda x : set(x),
+                                                               'omim_ids':self.set_from_lists,
+                                                               'pubmed_ids':self.set_from_lists,
+                                                               'omim_ids__direct': self.set_from_lists,
+                                                               'pubmed_ids__direct': self.set_from_lists
+                                                               })
 
-            df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism','marker/mechanism, therapeutic', 'therapeutic'])
+            df['direct_evidence'] = pd.Categorical(df['direct_evidence'], ['marker/mechanism','marker/mechanism, therapeutic', 'therapeutic','None'])
             df = df.sort_values(['direct_evidence','inference_score'],ascending=[True,False])
-            df = df[['chemical','chemical__id','disease','disease__id','direct_evidence','inference_gene_symbol','inference_score']]
+            df = df[['chemical','chemical__id','disease','disease__id','direct_evidence','inference_gene_symbol','inference_score',
+            'omim_ids','pubmed_ids','omim_ids__direct','pubmed_ids__direct'
+            ]]
             df = df.rename(columns={'inference_gene_symbol':'inference_network'})
             return df 
 
@@ -702,6 +716,23 @@ class QueryManager(BaseDbManager):
     def agg_direct_evidence(self,s):
         s = [v for v in s if v !='None']
         return ', '.join(sorted(list(set(s))))
+
+    def agg_sets(self,s):
+        ret = set([])
+        for v in s:
+            ret.union(v)
+        return ret
+
+    def set_from_lists(self,s):
+        ret = []
+        for v in s:
+            if type(v) == list:
+                ret += v
+            elif not np.isnan(v):
+                ret += [v]
+
+        return set(ret)
+
 
     def get_session(self):
         return self.session
